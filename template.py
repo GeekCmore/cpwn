@@ -1,4 +1,9 @@
 #!/usr/bin/python3
+
+'''
+    author: {{author}}
+    time: {{time}}
+'''
 from pwn import *
 
 filename = "{{filename}}"
@@ -12,7 +17,7 @@ if libcname:
 gs = '''
 b main
 {% if debug_file_directory %}set debug-file-directory {{debug_file_directory}}{%endif%}
-{% if source_dircetory %} set set directories {{source_dircetory}}{%endif%}
+{% if source_dircetory %}set directories {{source_dircetory}}{%endif%}
 '''
 
 def start():

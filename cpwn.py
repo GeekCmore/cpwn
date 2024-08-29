@@ -1,4 +1,4 @@
-#!/bin/python
+#!/bin/python3
 from tqdm import tqdm
 import subprocess
 import requests
@@ -8,6 +8,8 @@ import json
 import magic
 import shutil
 from pwn import ELF
+from prettytable import PrettyTable
+from datetime import datetime
 
 def download_one(file):
     try:
@@ -53,12 +55,11 @@ def precmd(ctx):
     with open(ctx.params["config"], 'r') as file:
         config = json.load(file)
         config['file_path'] = os.path.expanduser(config['file_path'])
-    pass
 
 
 @click.group(invoke_without_command=False)
 @click.pass_context
-@click.option('--verbose/-v', is_flag=True)
+@click.option('--verbose', is_flag=True)
 @click.option('--config', default=os.path.expanduser("~/.config/cpwn/config.json"), type=click.Path(exists=True, dir_okay=False, readable=True))
 def cli(ctx, verbose, config):
     if ctx.invoked_subcommand is not None:
@@ -74,7 +75,7 @@ def detect() -> dict:
         if os.path.isdir(file_path):
             continue
         file_type = mime.from_file(file_path)
-        if file_type == "application/x-pie-executable" and "_patched" not in file:
+        if (file_type == "application/x-pie-executable" or file_type == 'application/x-executable') and "_patched" not in file:
             target_files["executable"] = file_path
             click.echo(f"Detect excutable file {file}")
         if file_type == "application/x-sharedlib":
@@ -99,6 +100,22 @@ def patch():
     pass
 
 
+# @cli.command()
+def choose():
+    table = PrettyTable(['Idx','Version'])
+    table.hrules = True
+    lib_path = os.path.join(config['file_path'])
+    libc_list = []
+    for dir in os.listdir(lib_path):
+        libc_list.append(dir)
+    libc_list = sorted(libc_list, key = lambda x: x)
+    for i, row in enumerate(libc_list):
+        table.add_row([str(i), row])
+    print(table)
+    idx = int(input('Choose the version you wnat to modify:'))
+    return libc_list[idx]
+
+
 @cli.command()
 @click.option("--debug", is_flag=True, help="With symbol debug info.", default=True)
 @click.option("--src", is_flag=True, help="With libc source.", default=True)
@@ -106,40 +123,46 @@ def patch():
 @click.option("--port", help="Remote port.", default="1337")
 def init(debug, src, host, port):
     target_files = detect()
+    # copy patched
     if "executable" not in target_files:
         click.echo("No excutable! Make sure your pwn file without postfix '_patched'")
         exit(-1)
-    if "libc.so.6"  not in target_files:
-        click.echo("No libc!")
-        exit(-1)
-    version = get_version(target_files['libc.so.6'])
-    expect_dir = os.path.join(config['file_path'], version)
     executable_path = target_files['executable']
     executable_copy = executable_path + '_patched'
+    if os.path.exists(executable_copy):
+        if input("Patch executable exists, do you want to cover it?(y/n)") == 'n':
+            click.echo("Exit.")
+            exit(0)
     shutil.copy(executable_path, executable_copy)
     subprocess.run(f"chmod +x {executable_copy}", text=True, shell=True)
     subprocess.run(f"chmod +x {executable_path}", text=True, shell=True)
+
+    # find libc
     arch = ELF(executable_copy).arch
+    if "libc.so.6" not in target_files:
+        print("No libc file find in your workdir.")
+        if input("Do you want to list the table of versions in your enviroment?(y/n)") == 'n':
+            exit(0)
+        version = choose()
+    else:
+        version = get_version(target_files['libc.so.6'])
+    expect_dir = os.path.join(config['file_path'], version)
     libc_path = os.path.join(expect_dir, f"libc6_{version}_{arch}/lib/x86_64-linux-gnu/libc.so.6")
-    print(libc_path)
     if not os.path.exists(libc_path):
         click.echo("This version of libc doesn't exist!")
-        exit(-2)
-        # download_one()
-    if os.path.exists(executable_copy) and input("Patch executable exists, do you want to cover it?(y/n)") == 'n':
-        click.echo("Exit.")
         exit(0)
+        # download_one()
     subprocess.run(f"patchelf --replace-needed libc.so.6 {libc_path} {executable_copy}", text=True, shell=True)
     ld_path = os.path.join(expect_dir, f"libc6_{version}_{arch}/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2")
     if not os.path.exists(ld_path):
         click.echo("This version of ld doesn't exist!")
         exit(-2)
     subprocess.run(f"patchelf --set-interpreter {ld_path} {executable_copy}", text=True, shell=True)
-    for k, v in enumerate(target_files):
-        pass
+    # for others sharedlib
+        # for k, v in enumerate(target_files):
+        #     pass
     
     # generate exp
-
     from jinja2 import Template
     template = Template(open(os.path.expanduser(config['template'])).read())
     dbg_path = os.path.join(expect_dir, f"libc6-dbg_{version}_{arch}/usr/lib/debug")
@@ -154,20 +177,22 @@ def init(debug, src, host, port):
         host=host,
         port=port,
         debug_file_directory=dbg_path,
-        source_dircetory=src_path
+        source_dircetory=src_path,
+        author=config['author'],
+        time=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     )
-    if os.path.exists(config['script_name']) and input("Script exists, do you want to cover it?(y/n)") == 'n':
-        click.echo("Don't cover.")
-        click.echo(rendered_template)
+    if os.path.exists(config['script_name']):
+        if input("Script exists, do you want to cover it?(y/n)") == 'n':
+            click.echo("Don't cover.")
+            click.echo(rendered_template)
     else:
         with open(config['script_name'], 'w') as f:
             f.write(rendered_template)
         click.echo(f"Generate script {config['script_name']} successfully.")
 
 
-
 @cli.command()
-@click.option("--force/-f", is_flag=True, help="Download anyway.")
+@click.option("--force", is_flag=True, help="Download anyway.")
 def fetch(force):
     from bs4 import BeautifulSoup
     base_url = "https://launchpad.net"
