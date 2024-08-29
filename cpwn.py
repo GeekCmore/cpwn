@@ -129,16 +129,11 @@ def init(debug, src, host, port):
         exit(-1)
     executable_path = target_files['executable']
     executable_copy = executable_path + '_patched'
+    arch = ELF(executable_path).arch
     if os.path.exists(executable_copy):
-        if input("Patch executable exists, do you want to cover it?(y/n)") == 'n':
+        if input("Patched executable exists, do you want to cover it?(y/n)") == 'n':
             click.echo("Exit.")
             exit(0)
-    shutil.copy(executable_path, executable_copy)
-    subprocess.run(f"chmod +x {executable_copy}", text=True, shell=True)
-    subprocess.run(f"chmod +x {executable_path}", text=True, shell=True)
-
-    # find libc
-    arch = ELF(executable_copy).arch
     if "libc.so.6" not in target_files:
         print("No libc file find in your workdir.")
         if input("Do you want to list the table of versions in your enviroment?(y/n)") == 'n':
@@ -149,19 +144,22 @@ def init(debug, src, host, port):
     expect_dir = os.path.join(config['file_path'], version)
     libc_path = os.path.join(expect_dir, f"libc6_{version}_{arch}/lib/x86_64-linux-gnu/libc.so.6")
     if not os.path.exists(libc_path):
-        click.echo("This version of libc doesn't exist!")
+        click.echo(f"This version of {version} libc doesn't exist!")
         exit(0)
         # download_one()
+    shutil.copy(executable_path, executable_copy)
+    subprocess.run(f"chmod +x {executable_copy}", text=True, shell=True)
+    subprocess.run(f"chmod +x {executable_path}", text=True, shell=True)
     subprocess.run(f"patchelf --replace-needed libc.so.6 {libc_path} {executable_copy}", text=True, shell=True)
     ld_path = os.path.join(expect_dir, f"libc6_{version}_{arch}/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2")
-    if not os.path.exists(ld_path):
-        click.echo("This version of ld doesn't exist!")
-        exit(-2)
     subprocess.run(f"patchelf --set-interpreter {ld_path} {executable_copy}", text=True, shell=True)
+    # if not os.path.exists(ld_path):
+    #     click.echo("This version of ld doesn't exist!")
+    #     exit(-2)
     # for others sharedlib
         # for k, v in enumerate(target_files):
         #     pass
-    
+    click.echo(f"Patch {os.path.basename(target_files['executable'])} to {os.path.basename(executable_copy)} successfully.")
     # generate exp
     from jinja2 import Template
     template = Template(open(os.path.expanduser(config['template'])).read())

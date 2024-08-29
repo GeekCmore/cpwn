@@ -64,9 +64,8 @@ Do you want to list the table of versions in your enviroment?(y/n)y
 |  11 |  2.40-1ubuntu1   |
 +-----+------------------+
 Choose the version you wnat to modify:0
-Patch pwn to pwn_patched.
-Generate exp.py.
-Initialize successfully!
+Patch pwn to pwn_patched successfully.
+Generate script exp.py successfully.
 ```
 Or you have libc in your directory, cpwn can detect it automatically:
 ```sh
@@ -78,9 +77,8 @@ $ tree
 $ cpwn init
 Detect libc.so.6 file libc-2.23.so
 Detect excutable file orange_cat_diary
-Patch pwn to pwn_patched.
-Generate exp.py.
-Initialize successfully!
+Patch pwn to pwn_patched successfully.
+Generate script exp.py successfully.
 ```
 
 ### Template
