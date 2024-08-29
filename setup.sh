@@ -1,0 +1,10 @@
+#/bin/sh
+echo "Start setup!"
+pip install -r requirements.txt
+mkdir -p ~/.config/cpwn
+cp config.json ~/.config/cpwn/
+cp template.py ~/.config/cpwn/exp_template.py
+chmod +x cpwn.py
+echo "Move cpwn to /usr/bin"
+sudo cp cpwn.py /usr/bin/cpwn
+cpwn

@@ -1,0 +1,17 @@
+{
+    "author": "GeekCmore",
+    "template": "~/.config/cpwn/exp_template.py",
+    "script_name": "exp.py",
+    "file_path": "~/.config/cpwn/pkgs",
+    "mirror": "",
+    "archs": [
+        "amd64",
+        "i386"
+    ],
+    "pkgs": [
+        "libc6",
+        "libc6-dbg",
+        "glibc-source"
+    ],
+    "threads": 10
+}

@@ -1,0 +1,8 @@
+jinja2
+requests
+click
+pwntools
+tqdm
+python-magic
+beautifulsoup4
+lxml
