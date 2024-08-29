@@ -21,6 +21,7 @@ If you first use cpwn, just `fetch` the glibc versions maintain in https://launc
 ```sh
 cpwn fetch
 ```
+If you run into problems during fetch, just add `--force` options to forece update the pkgs.
 ### init
 After fetch, everything is finish. What you need to do is `init` in your work directory with your pwn file patchedless like this:
 ```sh
