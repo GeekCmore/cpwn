@@ -22,13 +22,16 @@ If you first use cpwn, just `fetch` the glibc versions maintain in https://launc
 cpwn fetch
 ```
 ### init
-After fetch, everything is finish. What you need to do is `init` in your work directory like this:
+After fetch, everything is finish. What you need to do is `init` in your work directory with your pwn file patchedless like this:
 ```sh
 $ tree
 .
 ├── pwn
-
 0 directories, 1 files
+$ ldd pwn
+        linux-vdso.so.1 (0x00007ffce7599000)
+        libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007f96427c0000)
+        /lib64/ld-linux-x86-64.so.2 (0x00007f9642a4e000)
 $ cpwn init
 Detect excutable file pwn
 No libc file find in your workdir.
@@ -80,6 +83,49 @@ Generate exp.py.
 Initialize successfully!
 ```
 
+### Template
+The template is as follows, you can replace it as you like. But with this template, you can:
+- run `./exp.py GDB` to pop a gdb window(change the `context.terminal = ['tmux', 'neww']` to  fit your terminal) with debug symbols and source of glibc.
+- run `./exp.py REMOTE` to attack the remote aircraft.
+- run `./exp.py DEBUG` to turn on debug log mode of pwntools.
+```py
+#!/usr/bin/python3
+
+'''
+    author: {{author}}
+    time: {{time}}
+'''
+from pwn import *
+
+filename = "{{filename}}"
+libcname = "{{libcname}}"
+host = "{{host}}"
+port = {{port}}
+elf = context.binary = ELF(filename)
+context.terminal = ['tmux', 'neww']
+if libcname:
+    libc = ELF(libcname)
+gs = '''
+b main
+{% if debug_file_directory %}set debug-file-directory {{debug_file_directory}}{%endif%}
+{% if source_dircetory %}set directories {{source_dircetory}}{%endif%}
+'''
+
+def start():
+    if args.GDB:
+        return gdb.debug(elf.path, gdbscript = gs)
+    elif args.REMOTE:
+        return remote(host, port)
+    else:
+        return process(elf.path)
+
+p = start()
+
+# Your exploit here
+
+p.interactive()
+
+```
 
 ## config
 These configuration items are straightforward, just try them.
