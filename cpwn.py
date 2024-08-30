@@ -11,7 +11,7 @@ import shutil
 from pwn import ELF
 from prettytable import PrettyTable
 from datetime import datetime
-
+from bs4 import BeautifulSoup
 
 # structure
 class BaseFile(Enum):
@@ -38,12 +38,13 @@ def log_error(msg):
     log_base(msg, 'red')
     exit(-1)
 
+
 def prompt(msg:str):
     tmp = input(msg+" (N/n to refuse, others to argee): ")
     return tmp != 'n' and tmp != 'N'
 
 
-def download_one(file):
+def download_and_extract(file):
     try:
         url = file[0]
         deb_filename = file[1]
@@ -58,7 +59,6 @@ def download_one(file):
                 unit='iB',
                 unit_scale=True,
                 unit_divisor=1024,
-                dynamic_ncols=True,
                 ascii=True,
                 leave=False,
             ) as bar:
@@ -79,7 +79,89 @@ def download_one(file):
         subprocess.run(['rm', '-f', tmp_file], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         subprocess.run(['rm', '-f', deb_filename], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         return f"Error: {e}"
-      
+
+
+def download_give_version_arch(version, arch):
+    download_list = generate_expect_download_list(version, arch)
+    multi_download(download_list)
+
+
+def multi_download(download_list):
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    cnt = 0
+    with ThreadPoolExecutor(max_workers=config['threads']) as executor:
+        future_to_file = {executor.submit(download_and_extract, file): file for file in download_list}
+        for future in tqdm(iterable=as_completed(future_to_file),
+                           desc="All to download",
+                           total=len(download_list),
+                           ascii=True,
+                           leave=False,
+                           ):
+            file = future_to_file[future]
+            try:
+                download_list.remove(file)
+                cnt += 1
+            except Exception as exc:
+                log_error(click.style(f"Fetch {os.path.basename(file[1])} generated an exception: {exc}", fg='red'))
+    log_success(click.style(f"Successfully download {cnt} files.", fg='blue'))
+    if len(download_list) != 0:
+        log_error(f"These download or extract failed: {download_list}")
+
+
+def fetch_archs_by_version(version:str) -> dict:
+    '''
+        use the given version of glibc to fetch arch id
+        such as https://launchpad.net/ubuntu/+source/glibc/2.35-0ubuntu3.7
+    '''
+    base_url = 'https://launchpad.net'
+    url = base_url + "/ubuntu/+source/glibc/" + version
+    div = BeautifulSoup(requests.get(url).text, 'lxml').find_all('div', {'id': 'source-builds'})[0]
+    arch_idx = {}
+    for a in div.find_all('a')[1:]:
+        arch_idx[a.get_text()] = a['href'] if 'http' in a['href'] else base_url + a['href']
+    return arch_idx
+
+
+def fetch_remote_files(url):
+    '''
+        fetch all files by build id
+        such as https://launchpad.net/~ubuntu-security/+archive/ubuntu/ppa/+build/28112201
+    '''
+    built_files = {}
+    # built_files_url = "https://launchpad.net/~ubuntu-security/+archive/ubuntu/ppa/+build/" + id
+    soup = BeautifulSoup(requests.get(url).text, 'lxml')
+    cpkgs = soup.find_all('div', {'id': 'files', 'class': 'portlet'})[0].find_all('a', {'class': 'sprite download'})
+    for cpkg in cpkgs:
+        cpkg_name = cpkg.get_text().strip()
+        cpkg_url = cpkg['href']
+        built_files[cpkg_name] = cpkg_url
+    return built_files
+
+
+def generate_expect_download_list(version, arch) -> list:
+    expect_pkgs = []
+    for expect_pkg in config['pkgs']:
+        if expect_pkg == 'glibc-source':
+            if arch == 'amd64':         # only amd64 has glibc-source_xxxxxx_all.deb
+                expect_pkgs.append(f'{expect_pkg}_{version}_all.deb')
+        else:
+            expect_pkgs.append(f'{expect_pkg}_{version}_{arch}.deb')
+    arch_urls = fetch_archs_by_version(version)
+    remote_files_map = fetch_remote_files(arch_urls[arch])
+    arch_store_path = dir_from_version_arch(version, arch)
+    download_list = []
+    for expect_file in expect_pkgs:
+        expect_file_path = os.path.join(arch_store_path, expect_file)
+        download_list.append((remote_files_map[expect_file], expect_file_path))
+    return download_list
+
+
+def dir_from_version_arch(version, arch):
+    store_path = os.path.join(config['file_path'], version)
+    arch_path = os.path.join(store_path, arch)
+    if not os.path.exists(arch_path):
+        os.makedirs(arch_path)
+    return arch_path
 
 def detect(target_files:dict = {}) -> dict:
     '''
@@ -135,7 +217,7 @@ def get_glibc_files(version:str, arch:str) -> dict:
     return glibc_files
 
 
-def choose():
+def choose_version():
     table = PrettyTable(['Idx','Version'])
     table.hrules = True
     lib_path = os.path.join(config['file_path'])
@@ -145,7 +227,7 @@ def choose():
     libc_list = sorted(libc_list, key = lambda x: x)
     for i, row in enumerate(libc_list):
         table.add_row([str(i), row])
-    print(table)
+    log_info(table)
     idx = int(input('Choose the version you wnat to modify:'))
     return libc_list[idx]
 
@@ -171,24 +253,23 @@ def do_patch(target_files):
     arch = ELF(target_files[BaseFile.EXECUTABLE]).arch
     version = get_version_by_libc(target_files[BaseFile.LIBC])
     glibc_files = get_glibc_files(version, arch)
-    if glibc_files[BaseFile.LIBC] not in target_files:
+    if BaseFile.LIBC not in glibc_files:
         log_info("No libc file find in your workdir.")
         if not prompt("Do you want to list the table of versions in your enviroment?"):
             exit(0)
-        version = choose()
-    expect_dir = os.path.join(config['file_path'], version)
+        version = choose_version()
+    expect_dir = os.path.join(os.path.join(config['file_path'], version), arch)
     libc_path = os.path.join(expect_dir, f"libc6_{version}_{arch}/lib/x86_64-linux-gnu/libc.so.6")
-    if not os.path.exists(libc_path):
-        log_error(f"This version of {version} libc doesn't exist! Maybe you should fetch again.")
-        exit(0)
-    else:
-        prepared_files[BaseFile.LIBC] = libc_path
     ld_path = os.path.join(expect_dir, f"libc6_{version}_{arch}/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2")
-    if not os.path.exists(ld_path):
+    if not os.path.exists(libc_path) or not os.path.exists(ld_path):
         log_error(f"This version of {version} libc doesn't exist! Maybe you should fetch again.")
-        exit(0)
-    else:
-        prepared_files[BaseFile.LD] = ld_path
+        if prompt("You don't have this version of glibc, do you want to download?"):
+            download_give_version_arch(version, arch)
+        else:
+            log_error("No suitable glibc!")
+        prepared_files[BaseFile.LIBC] = libc_path
+    prepared_files[BaseFile.LIBC] = libc_path
+    prepared_files[BaseFile.LD] = ld_path
     # copy and patch
     copy(target_files[BaseFile.EXECUTABLE], target_excutable)
     subprocess.run(f"chmod +x {target_excutable}", text=True, shell=True)
@@ -201,9 +282,8 @@ def do_patch(target_files):
     # debug symbol and 
     dbg_path = os.path.join(expect_dir, f"libc6-dbg_{version}_{arch}/usr/lib/debug")
     if os.path.exists(dbg_path): prepared_files[BaseFile.DBG] = dbg_path
-    src_path = os.path.join(expect_dir, f"glibc-source_{version}_all/usr/src/glibc/glibc-2.35")
+    src_path = os.path.join(expect_dir, f"glibc-source_{version}_all/usr/src/glibc/glibc-{version[0:4]}")
     if os.path.exists(src_path): prepared_files[BaseFile.SRC] = src_path
-
     return prepared_files
 
 
@@ -228,24 +308,25 @@ def do_generate(args:dict):
         f.write(rendered_template)
     click.echo(f"Generate script {config['script_name']} successfully.")
 
-# @cli.command()
-# @command.option()
-# def generate():
-
 
 # command wrapper functions
+    
 def precmd(ctx):
     global config
     with open(ctx.params["config"], 'r') as file:
         config = json.load(file)
         config['file_path'] = os.path.expanduser(config['file_path'])
+        config['threads'] = ctx.params['threads']
+        config['force'] = ctx.params['force']
 
 
 @click.group(invoke_without_command=False)
 @click.pass_context
 @click.option('--verbose', is_flag=True)
 @click.option('--config', default=os.path.expanduser("~/.config/cpwn/config.json"), type=click.Path(exists=True, dir_okay=False, readable=True))
-def cli(ctx, verbose, config):
+@click.option("--force", is_flag=True, help="Download anyway.")
+@click.option("--threads", help="Threads for download and extract")
+def cli(ctx, verbose, config, threads, force):
     if ctx.invoked_subcommand is not None:
         precmd(ctx)
 
@@ -269,64 +350,20 @@ def init(host, port):
     do_generate(template_args)
 
 
-@cli.command()
-@click.option("--force", is_flag=True, help="Download anyway.")
-def fetch(force):
-    from bs4 import BeautifulSoup
+@cli.command(help="Fetch the popular version.")
+def fetch():
     base_url = "https://launchpad.net"
     version_url = base_url + "/ubuntu/+source/glibc"
-    click.echo(click.style(f"Start fetching versions.", fg='blue'))
     soup = BeautifulSoup(requests.get(version_url).text, 'lxml')
     rows = soup.find_all('tr', class_='archive_package_row')
-    version_list = []
     download_list = []
-    for row in tqdm(rows, desc="Fetching versions", leave=False, dynamic_ncols=True, ascii=True):
-        name = row.find_all('a')[1].get_text().strip()
-        url = base_url + row.find_all('a', class_='expander')[0]["href"].strip()
-        store_path = os.path.join(config['file_path'], name)
-        exists = os.path.exists(store_path)
-        files = {}
-        if not exists or force:
-            try:
-                os.makedirs(store_path)
-            except:
-                pass
-            expect_pkg = [
-                f'{pkg}_{name}_{arch}.deb' if  pkg != 'glibc-source' else f'{pkg}_{name}_all.deb'
-                for pkg in config['pkgs'] for arch in config['archs']
-                ]
-            cpkgs = BeautifulSoup(requests.get(url).text, 'lxml').find_all('li', class_='package binary')
-            for cpkg in cpkgs:
-                cpkg_name = cpkg.find_all('a')[0].get_text().strip()
-                cpkg_url = cpkg.find_all('a')[0]['href']
-                if cpkg_name in expect_pkg:
-                    files[cpkg_name] = cpkg_url
-                    download_list.append((cpkg_url, os.path.join(store_path, cpkg_name)))
-        elif not force:
-            click.echo(click.style(f"Version {name} exists, skip.", fg='blue'))
-        version_list.append((name, url, exists, files))
-    click.echo(click.style(f"Get {len(version_list)} verions, start downloading.", fg='blue'))
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-    cnt = 0
-    with ThreadPoolExecutor(max_workers=config['threads']) as executor:
-        future_to_file = {executor.submit(download_one, file): file for file in download_list}
-        for future in tqdm(iterable=as_completed(future_to_file),
-                           desc="All to download",
-                           total=len(download_list),
-                           dynamic_ncols=True,
-                           ascii=True,
-                           leave=False,
-                           ):
-            file = future_to_file[future]
-            try:
-                download_list.remove(file)
-                cnt += 1
-            except Exception as exc:
-                click.echo(click.style(f"Fetch {os.path.basename(file[1])} generated an exception: {exc}", fg='red'))
-    click.echo(click.style(f"Successfully download {cnt} files.", fg='blue'))
-    if len(download_list) != 0:
-        click.echo(f"These download or extract failed: {download_list}")
-
+    for row in tqdm(rows, desc="Fetching versions", leave=False, ascii=True):
+        version = row.find_all('a')[1].get_text().strip()
+        for expect_arch in config['archs']:
+            download_list += generate_expect_download_list(version, expect_arch)
+    log_success(f"Get {len(rows)} verions, start downloading.")
+    multi_download(download_list)
+ 
 
 if __name__ == '__main__':
     cli()
