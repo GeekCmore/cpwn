@@ -262,8 +262,8 @@ def do_patch(target_files):
     libc_path = os.path.join(expect_dir, f"libc6_{version}_{arch}/lib/x86_64-linux-gnu/libc.so.6")
     ld_path = os.path.join(expect_dir, f"libc6_{version}_{arch}/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2")
     if not os.path.exists(libc_path) or not os.path.exists(ld_path):
-        log_info(f"This version of {version} libc doesn't exist! Maybe you should fetch again.")
-        if prompt("You don't have this version of glibc, do you want to download?"):
+        if prompt(f"You don't have {version} version of glibc, do you want to download?"):
+            log_info("Start downloading...")
             download_give_version_arch(version, arch)
         else:
             log_error("No suitable glibc!")
