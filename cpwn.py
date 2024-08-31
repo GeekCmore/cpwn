@@ -227,6 +227,7 @@ def choose_version():
     libc_list = sorted(libc_list, key = lambda x: x)
     for i, row in enumerate(libc_list):
         table.add_row([str(i), row])
+    log_info(table)
     idx = int(input('Choose the version you wnat to modify:'))
     return libc_list[idx]
 
@@ -258,7 +259,6 @@ def do_patch(target_files):
     else:
         version = get_version_by_libc(target_files[BaseFile.LIBC])
     glibc_files = get_glibc_files(version, arch)
-    log_info(glibc_files)
     if not os.path.exists(glibc_files[BaseFile.LIBC]) or not os.path.exists(glibc_files[BaseFile.LD]):
         if prompt(f"You don't have {version} version of glibc, do you want to download?"):
             log_info("Start downloading...")
