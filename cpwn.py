@@ -68,7 +68,7 @@ def download_and_extract(file):
             subprocess.run(['mv', tmp_file, deb_filename], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         if not os.path.exists(extract_path):
             subprocess.run(['dpkg', '-x', deb_filename, extract_path], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            subprocess.run(f"chmod -R +x {extract_path}", text=True, shell=True)
+            subprocess.run(f"chmod -R +x \"{extract_path}\"", text=True, shell=True)
 
         if "glibc-source" in extract_path:
             source_path = os.path.join(extract_path, "usr/src/glibc/")
@@ -197,7 +197,7 @@ def detect(target_files:dict = {}) -> dict:
 
 
 def get_version_by_libc(file):
-    result = subprocess.run(f"strings {file} | grep 'Ubuntu GLIBC' | tail -n 1", stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=True)
+    result = subprocess.run(f'strings "{file}" | grep "Ubuntu GLIBC" | tail -n 1', stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=True)
     return result.stdout.split("(Ubuntu GLIBC ")[1].split(')')[0]
 
 
@@ -270,10 +270,10 @@ def do_patch(target_files):
     prepared_files[BaseFile.LD] = glibc_files[BaseFile.LD]
     # copy and patch
     copy(target_files[BaseFile.EXECUTABLE], target_excutable)
-    subprocess.run(f"chmod +x {target_excutable}", text=True, shell=True)
-    subprocess.run(f"chmod +x {target_files[BaseFile.EXECUTABLE]}", text=True, shell=True)  
-    subprocess.run(f"patchelf --replace-needed libc.so.6 {glibc_files[BaseFile.LIBC]} {target_excutable}", text=True, shell=True)
-    subprocess.run(f"patchelf --set-interpreter {glibc_files[BaseFile.LD]} {target_excutable}", text=True, shell=True)
+    subprocess.run(f'chmod +x "{target_excutable}"', text=True, shell=True)
+    subprocess.run(f'chmod +x "{target_files[BaseFile.EXECUTABLE]}"', text=True, shell=True)  
+    subprocess.run(f'patchelf --replace-needed libc.so.6 "{glibc_files[BaseFile.LIBC]}" "{target_excutable}"', text=True, shell=True)
+    subprocess.run(f'patchelf --set-interpreter "{glibc_files[BaseFile.LD]}" "{target_excutable}"', text=True, shell=True)
     prepared_files['duplicate'] = target_excutable
     log_success(f"Patch {os.path.basename(target_files[BaseFile.EXECUTABLE])} to {os.path.basename(target_excutable)} successfully.")
     #! Add: patch ohter sharedlib such as libpthread
@@ -302,7 +302,7 @@ def do_generate(args:dict):
             exit(0)
     with open(config['script_name'], 'w') as f:
         f.write(rendered_template)
-    subprocess.run(f"chmod +x {config['script_name']}", text=True, shell=True)
+    subprocess.run(f"chmod +x \"{config['script_name']}\"", text=True, shell=True)
     click.echo(f"Generate script {config['script_name']} successfully.")
 
 
