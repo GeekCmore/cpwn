@@ -282,9 +282,9 @@ def do_patch(target_files):
     #! Add: patch ohter sharedlib such as libpthread
     # debug symbol and 
     dbg_path = os.path.join(expect_dir, glibc_files[BaseFile.DBG])
-    if os.path.exists(dbg_path): prepared_files[BaseFile.DBG] = dbg_path
+    prepared_files[BaseFile.DBG] = dbg_path if os.path.exists(dbg_path) else None
     src_path = os.path.join(expect_dir, glibc_files[BaseFile.SRC])
-    if os.path.exists(src_path): prepared_files[BaseFile.SRC] = src_path
+    prepared_files[BaseFile.SRC] = src_path if os.path.exists(src_path) else None
     return prepared_files
 
 
