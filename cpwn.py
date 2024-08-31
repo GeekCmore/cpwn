@@ -227,7 +227,6 @@ def choose_version():
     libc_list = sorted(libc_list, key = lambda x: x)
     for i, row in enumerate(libc_list):
         table.add_row([str(i), row])
-    log_info(table)
     idx = int(input('Choose the version you wnat to modify:'))
     return libc_list[idx]
 
@@ -303,6 +302,7 @@ def do_generate(args:dict):
             exit(0)
     with open(config['script_name'], 'w') as f:
         f.write(rendered_template)
+    subprocess.run(f"chmod +x {config['script_name']}", text=True, shell=True)
     click.echo(f"Generate script {config['script_name']} successfully.")
 
 
