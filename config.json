@@ -13,5 +13,6 @@
         "libc6-dbg",
         "glibc-source"
     ],
-    "threads": 10
+    "threads": 10,
+    "force": false
 }

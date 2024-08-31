@@ -50,22 +50,22 @@ def download_and_extract(file):
         deb_filename = file[1]
         extract_path = ".".join(deb_filename.split('.')[:-1])
         tmp_file = deb_filename + '.download'
-        # if not os.path.exists(deb_filename):
-        resp = requests.get(url, stream=True)
-        total = int(resp.headers.get('content-length', 0))
-        with open(tmp_file, 'wb') as file, tqdm(
-            desc=os.path.basename(deb_filename),
-            total=total,
-            unit='iB',
-            unit_scale=True,
-            unit_divisor=1024,
-            ascii=True,
-            leave=False,
-        ) as bar:
-            for data in resp.iter_content(chunk_size=1024):
-                size = file.write(data)
-                bar.update(size)
-        subprocess.run(['mv', tmp_file, deb_filename], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        if not os.path.exists(deb_filename) or config['force']:
+            resp = requests.get(url, stream=True)
+            total = int(resp.headers.get('content-length', 0))
+            with open(tmp_file, 'wb') as file, tqdm(
+                desc=os.path.basename(deb_filename),
+                total=total,
+                unit='iB',
+                unit_scale=True,
+                unit_divisor=1024,
+                ascii=True,
+                leave=False,
+            ) as bar:
+                for data in resp.iter_content(chunk_size=1024):
+                    size = file.write(data)
+                    bar.update(size)
+            subprocess.run(['mv', tmp_file, deb_filename], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         if not os.path.exists(extract_path):
             subprocess.run(['dpkg', '-x', deb_filename, extract_path], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             subprocess.run(f"chmod -R +x {extract_path}", text=True, shell=True)
@@ -207,10 +207,10 @@ def get_glibc_files(version:str, arch:str) -> dict:
     '''
     glibc_files = {}
     expect_dir = os.path.join(config['file_path'], version)
-    glibc_files[BaseFile.LIBC] = os.path.join(expect_dir, f"libc6_{version}_{arch}/lib/x86_64-linux-gnu/libc.so.6")
-    glibc_files[BaseFile.LD] = os.path.join(expect_dir, f"libc6_{version}_{arch}/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2")
-    glibc_files[BaseFile.DBG] = os.path.join(expect_dir, f"libc6-dbg_{version}_{arch}/usr/lib/debug")
-    glibc_files[BaseFile.SRC] = os.path.join(expect_dir, f"glibc-source_{version}_all/usr/src/glibc/glibc-{version[0:4]}")
+    glibc_files[BaseFile.LIBC] = os.path.join(expect_dir, f"{arch}/libc6_{version}_{arch}/lib/x86_64-linux-gnu/libc.so.6")
+    glibc_files[BaseFile.LD] = os.path.join(expect_dir, f"{arch}/libc6_{version}_{arch}/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2")
+    glibc_files[BaseFile.DBG] = os.path.join(expect_dir, f"{arch}/libc6-dbg_{version}_{arch}/usr/lib/debug")
+    glibc_files[BaseFile.SRC] = os.path.join(expect_dir, f"amd64/glibc-source_{version}_all/usr/src/glibc/glibc-{version[0:4]}")
     # for k, v in glibc_files.items():
     #     if not os.path.exists(v):
     #         del glibc_files[k]
@@ -259,32 +259,28 @@ def do_patch(target_files):
     else:
         version = get_version_by_libc(target_files[BaseFile.LIBC])
     glibc_files = get_glibc_files(version, arch)
-    expect_dir = os.path.join(os.path.join(config['file_path'], version), arch)
-    libc_path = os.path.join(expect_dir, glibc_files[BaseFile.LIBC])
-    ld_path = os.path.join(expect_dir, glibc_files[BaseFile.LD])
-    if not os.path.exists(libc_path) or not os.path.exists(ld_path):
+    log_info(glibc_files)
+    if not os.path.exists(glibc_files[BaseFile.LIBC]) or not os.path.exists(glibc_files[BaseFile.LD]):
         if prompt(f"You don't have {version} version of glibc, do you want to download?"):
             log_info("Start downloading...")
             download_give_version_arch(version, arch)
         else:
             log_error("No suitable glibc!")
-        prepared_files[BaseFile.LIBC] = libc_path
-    prepared_files[BaseFile.LIBC] = libc_path
-    prepared_files[BaseFile.LD] = ld_path
+        prepared_files[BaseFile.LIBC] = glibc_files[BaseFile.LIBC]
+    prepared_files[BaseFile.LIBC] = glibc_files[BaseFile.LIBC]
+    prepared_files[BaseFile.LD] = glibc_files[BaseFile.LD]
     # copy and patch
     copy(target_files[BaseFile.EXECUTABLE], target_excutable)
     subprocess.run(f"chmod +x {target_excutable}", text=True, shell=True)
     subprocess.run(f"chmod +x {target_files[BaseFile.EXECUTABLE]}", text=True, shell=True)  
-    subprocess.run(f"patchelf --replace-needed libc.so.6 {libc_path} {target_excutable}", text=True, shell=True)
-    subprocess.run(f"patchelf --set-interpreter {ld_path} {target_excutable}", text=True, shell=True)
+    subprocess.run(f"patchelf --replace-needed libc.so.6 {glibc_files[BaseFile.LIBC]} {target_excutable}", text=True, shell=True)
+    subprocess.run(f"patchelf --set-interpreter {glibc_files[BaseFile.LD]} {target_excutable}", text=True, shell=True)
     prepared_files['duplicate'] = target_excutable
     log_success(f"Patch {os.path.basename(target_files[BaseFile.EXECUTABLE])} to {os.path.basename(target_excutable)} successfully.")
     #! Add: patch ohter sharedlib such as libpthread
-    # debug symbol and 
-    dbg_path = os.path.join(expect_dir, glibc_files[BaseFile.DBG])
-    prepared_files[BaseFile.DBG] = dbg_path if os.path.exists(dbg_path) else None
-    src_path = os.path.join(expect_dir, glibc_files[BaseFile.SRC])
-    prepared_files[BaseFile.SRC] = src_path if os.path.exists(src_path) else None
+    # debug symbol and source
+    prepared_files[BaseFile.DBG] = glibc_files[BaseFile.DBG] if os.path.exists(glibc_files[BaseFile.DBG]) else None
+    prepared_files[BaseFile.SRC] = glibc_files[BaseFile.SRC] if os.path.exists(glibc_files[BaseFile.SRC]) else None
     return prepared_files
 
 
@@ -325,7 +321,7 @@ def precmd(ctx):
 @click.pass_context
 @click.option('--verbose', is_flag=True)
 @click.option('--config', default=os.path.expanduser("~/.config/cpwn/config.json"), type=click.Path(exists=True, dir_okay=False, readable=True))
-@click.option("--force", is_flag=True, help="Download anyway.")
+@click.option("--force", is_flag=True, help="Download anyway.", default=False)
 @click.option("--threads", help="Threads for download and extract")
 def cli(ctx, verbose, config, threads, force):
     if ctx.invoked_subcommand is not None:
