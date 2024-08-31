@@ -210,7 +210,7 @@ def get_glibc_files(version:str, arch:str) -> dict:
     glibc_files[BaseFile.LIBC] = os.path.join(expect_dir, f"libc6_{version}_{arch}/lib/x86_64-linux-gnu/libc.so.6")
     glibc_files[BaseFile.LD] = os.path.join(expect_dir, f"libc6_{version}_{arch}/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2")
     glibc_files[BaseFile.DBG] = os.path.join(expect_dir, f"libc6-dbg_{version}_{arch}/usr/lib/debug")
-    glibc_files[BaseFile.SRC] = os.path.join(expect_dir, f"glibc-source_{version}_all/usr/src/glibc/glibc-2.35")
+    glibc_files[BaseFile.SRC] = os.path.join(expect_dir, f"glibc-source_{version}_all/usr/src/glibc/glibc-{version[0:4]}")
     # for k, v in glibc_files.items():
     #     if not os.path.exists(v):
     #         del glibc_files[k]
@@ -251,16 +251,17 @@ def do_patch(target_files):
     prepared_files = {}
     target_excutable = target_files[BaseFile.EXECUTABLE] + '_patched'  
     arch = ELF(target_files[BaseFile.EXECUTABLE]).arch
-    version = get_version_by_libc(target_files[BaseFile.LIBC])
-    glibc_files = get_glibc_files(version, arch)
-    if BaseFile.LIBC not in glibc_files:
+    if BaseFile.LIBC not in target_files:
         log_info("No libc file find in your workdir.")
         if not prompt("Do you want to list the table of versions in your enviroment?"):
             exit(0)
         version = choose_version()
+    else:
+        version = get_version_by_libc(target_files[BaseFile.LIBC])
+    glibc_files = get_glibc_files(version, arch)
     expect_dir = os.path.join(os.path.join(config['file_path'], version), arch)
-    libc_path = os.path.join(expect_dir, f"libc6_{version}_{arch}/lib/x86_64-linux-gnu/libc.so.6")
-    ld_path = os.path.join(expect_dir, f"libc6_{version}_{arch}/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2")
+    libc_path = os.path.join(expect_dir, glibc_files[BaseFile.LIBC])
+    ld_path = os.path.join(expect_dir, glibc_files[BaseFile.LD])
     if not os.path.exists(libc_path) or not os.path.exists(ld_path):
         if prompt(f"You don't have {version} version of glibc, do you want to download?"):
             log_info("Start downloading...")
@@ -280,9 +281,9 @@ def do_patch(target_files):
     log_success(f"Patch {os.path.basename(target_files[BaseFile.EXECUTABLE])} to {os.path.basename(target_excutable)} successfully.")
     #! Add: patch ohter sharedlib such as libpthread
     # debug symbol and 
-    dbg_path = os.path.join(expect_dir, f"libc6-dbg_{version}_{arch}/usr/lib/debug")
+    dbg_path = os.path.join(expect_dir, glibc_files[BaseFile.DBG])
     if os.path.exists(dbg_path): prepared_files[BaseFile.DBG] = dbg_path
-    src_path = os.path.join(expect_dir, f"glibc-source_{version}_all/usr/src/glibc/glibc-{version[0:4]}")
+    src_path = os.path.join(expect_dir, glibc_files[BaseFile.SRC])
     if os.path.exists(src_path): prepared_files[BaseFile.SRC] = src_path
     return prepared_files
 
