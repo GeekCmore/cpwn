@@ -50,25 +50,25 @@ def download_and_extract(file):
         deb_filename = file[1]
         extract_path = ".".join(deb_filename.split('.')[:-1])
         tmp_file = deb_filename + '.download'
-        if not os.path.exists(deb_filename):
-            resp = requests.get(url, stream=True)
-            total = int(resp.headers.get('content-length', 0))
-            with open(tmp_file, 'wb') as file, tqdm(
-                desc=os.path.basename(deb_filename),
-                total=total,
-                unit='iB',
-                unit_scale=True,
-                unit_divisor=1024,
-                ascii=True,
-                leave=False,
-            ) as bar:
-                for data in resp.iter_content(chunk_size=1024):
-                    size = file.write(data)
-                    bar.update(size)
-            subprocess.run(['mv', tmp_file, deb_filename], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            if not os.path.exists(extract_path):
-                subprocess.run(['dpkg', '-x', deb_filename, extract_path], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-                subprocess.run(f"chmod -R +x {extract_path}", text=True, shell=True)
+        # if not os.path.exists(deb_filename):
+        resp = requests.get(url, stream=True)
+        total = int(resp.headers.get('content-length', 0))
+        with open(tmp_file, 'wb') as file, tqdm(
+            desc=os.path.basename(deb_filename),
+            total=total,
+            unit='iB',
+            unit_scale=True,
+            unit_divisor=1024,
+            ascii=True,
+            leave=False,
+        ) as bar:
+            for data in resp.iter_content(chunk_size=1024):
+                size = file.write(data)
+                bar.update(size)
+        subprocess.run(['mv', tmp_file, deb_filename], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        if not os.path.exists(extract_path):
+            subprocess.run(['dpkg', '-x', deb_filename, extract_path], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            subprocess.run(f"chmod -R +x {extract_path}", text=True, shell=True)
 
         if "glibc-source" in extract_path:
             source_path = os.path.join(extract_path, "usr/src/glibc/")
