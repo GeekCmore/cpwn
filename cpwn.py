@@ -197,7 +197,7 @@ def detect(target_files:dict = {}) -> dict:
 
 
 def get_version_by_libc(file):
-    result = subprocess.run(f"strings {file} | grep GLIBC | tail -n 1", stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=True)
+    result = subprocess.run(f"strings {file} | grep 'Ubuntu GLIBC' | tail -n 1", stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=True)
     return result.stdout.split("(Ubuntu GLIBC ")[1].split(')')[0]
 
 
