@@ -207,8 +207,12 @@ def get_glibc_files(version:str, arch:str) -> dict:
     '''
     glibc_files = {}
     expect_dir = os.path.join(config['file_path'], version)
-    glibc_files[BaseFile.LIBC] = os.path.join(expect_dir, f"{arch}/libc6_{version}_{arch}/lib/x86_64-linux-gnu/libc.so.6")
-    glibc_files[BaseFile.LD] = os.path.join(expect_dir, f"{arch}/libc6_{version}_{arch}/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2")
+    if float(version[0:4]) >= 2.39:
+        glibc_files[BaseFile.LIBC] = os.path.join(expect_dir, f"{arch}/libc6_{version}_{arch}/usr/lib/x86_64-linux-gnu/libc.so.6")
+        glibc_files[BaseFile.LD] = os.path.join(expect_dir, f"{arch}/libc6_{version}_{arch}/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2")
+    else:
+        glibc_files[BaseFile.LIBC] = os.path.join(expect_dir, f"{arch}/libc6_{version}_{arch}/lib/x86_64-linux-gnu/libc.so.6")
+        glibc_files[BaseFile.LD] = os.path.join(expect_dir, f"{arch}/libc6_{version}_{arch}/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2")
     glibc_files[BaseFile.DBG] = os.path.join(expect_dir, f"{arch}/libc6-dbg_{version}_{arch}/usr/lib/debug")
     glibc_files[BaseFile.SRC] = os.path.join(expect_dir, f"amd64/glibc-source_{version}_all/usr/src/glibc/glibc-{version[0:4]}")
     # for k, v in glibc_files.items():
