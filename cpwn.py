@@ -1,4 +1,4 @@
-#!/bin/python3
+#!/usr/bin/env python
 from enum import Enum
 from tqdm import tqdm
 import subprocess
