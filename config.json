@@ -3,6 +3,7 @@
     "template": "~/.config/cpwn/exp_template.py",
     "script_name": "exp.py",
     "file_path": "~/.config/cpwn/pkgs",
+    "kernel_file_path": "~/.config/cpwn/kernel_exploit",
     "mirror": "",
     "archs": [
         "amd64",
