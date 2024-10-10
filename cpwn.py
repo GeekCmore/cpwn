@@ -442,10 +442,21 @@ def do_extract_cpio(exploit_dir: str, cpio: str):
 
 def do_generate_debug(script: str, cpio: str):
     log_info("Start generate debug script.")
+    with open(script, "r") as f:
+        content = f.read()
+    # complie exp
+    compiler_script = os.path.join(config["kernel_file_path"], "compiler.sh")
+    with open(compiler_script, "r") as f:
+        content = f.read() + "\n" + content
+    content.replace("rootfs.cpio", os.path.basename(cpio))
+    run_script = os.path.join(os.path.dirname(script), "exploit/run.sh")
+    if not os.path.exists(run_script):
+        with open(run_script, "w") as f:
+            f.write(content)
+        subprocess.run(f"chmod +x {run_script}", text=True, shell=True)
+        log_info("Create run.sh!")
     debug_script = os.path.join(os.path.dirname(script), "exploit/debug.sh")
     if not os.path.exists(debug_script):
-        with open(script, "r") as f:
-            content = f.read()
         # nokaslr
         if "nokaslr" in content and "kaslr" not in content:
             content.replace("kaslr", "nokaslr")
@@ -455,17 +466,12 @@ def do_generate_debug(script: str, cpio: str):
             content = "\\".join(
                 lines[:-1] + [lines[-1].rstrip(" \n") + " \\\n\t-s -S\n"]
             )
-        # complie exp
-        compiler_script = os.path.join(config["kernel_file_path"], "compiler.sh")
-        with open(compiler_script, "r") as f:
-            content = f.read() + "\n" + content
-        content.replace("rootfs.cpio", os.path.basename(cpio))
         # write to debug_script
         with open(debug_script, "w") as f:
             f.write(content)
-        log_info("Successfully!")
-    else:
-        log_info("Exists, skipping.")
+        subprocess.run(f"chmod +x {debug_script}", text=True, shell=True)
+        log_info("Create debug.sh!")
+    log_info("Finish.")
     return debug_script
 
     # def do_get_kpm_addr(script, kpm):
