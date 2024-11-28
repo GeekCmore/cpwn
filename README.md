@@ -6,6 +6,7 @@ A tool inspired by [pwninit](https://github.com/io12/pwninit) and [glibc-all-in-
 - Generate the exploit using the [jinja2]() template.
 - Provides exploit templates that support display debug symbols and source code.
 - Flexible way to modify [configuration files](./config.json).
+- Automatically initializes the kernel exploitation environment.
 
 ## Setup
 If you are using Ubuntu, you can just set as follwing:
@@ -82,7 +83,50 @@ Patch pwn to pwn_patched successfully.
 Generate script exp.py successfully.
 ```
 
+### kernel
+
+This command will extract the kernel image and the root filesystem, then generate vmlinux, .gdbinit, exp.c, debug.sh files for exploit devloping.
+
+```sh
+$ cpwn kernel ./run.sh ./rootfs.cpio ./bzImage
+[+] Start generating vmlinux.
+[+] Kernel successfully decompressed in-memory (the offsets that follow will be given relative to the decompressed binary)
+[+] Version string: Linux version 6.1.73 (root@xxxx) (gcc (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0, GNU ld (GNU Binutils for Ubuntu) 2.38) # SMP PREEMPT_DYNAMIC 
+[+] Guessed architecture: x86_64 successfully in 2.10 seconds
+[+] Found kallsyms_token_table at file offset 0x01762190
+[+] Found kallsyms_token_index at file offset 0x01762500
+[+] Found kallsyms_markers at file offset 0x017138b8
+[+] Found kallsyms_names at file offset 0x015b1838
+[+] Found kallsyms_num_syms at file offset 0x015b1830
+[i] Negative offsets overall: 99.7338 %
+[i] Null addresses overall: 0.00187454 %
+[+] Found kallsyms_offsets at file offset 0x01549510
+[+] Successfully wrote the new ELF kernel to /home/geekcmore/ctf/pwn/games/ctfpunk/Linux_kernel/Heap/HeapSpray/attachment/exploit/vmlinux
+[+] Successfully!
+[+] Start extract cpio.
+5097 blocks
+[+] Successfully!
+[+] Walk for kpm files
+[*] Found 1 /home/geekcmore/ctf/pwn/games/ctfpunk/Linux_kernel/Heap/HeapSpray/attachment/exploit/extracted/vuln.ko
+[+] Start generate gdbscript at exploit/.gdbinit.
+[+] Successfully!
+[+] Start generate debug script.
+[+] Create run.sh!
+[+] Create debug.sh!
+[+] Finish.
+[+] Start generate exploit script.
+[+] Successfully!
+```
+
+After that, we just `cd ./exploit`, develop your `exp.c`, then run `./debug.sh` for debug, `./run.sh` for test with the `exp.c` compiled and the `rootfs.cpio`  packed automatically. What you  should do is just run `./exp` in the Vm started by qemu.
+
+```
+$ ls
+debug.sh  exp.c  extracted  run.sh  vmlinux  vuln.ko
+```
+
 ### Template
+
 The template is as follows, you can replace it as you like. But with this template, you can:
 - run `./exp.py GDB` to pop a gdb window(change the `context.terminal = ['tmux', 'neww']` to  fit your terminal) with debug symbols and source of glibc.
 - run `./exp.py REMOTE` to attack the remote aircraft.
@@ -126,7 +170,10 @@ p.interactive()
 
 ```
 
+And the  [kernel/exploit/exp.c](kernel/exploit/exp.c) is the template for kernel exploit.
+
 ## config
+
 These configuration items are straightforward, just try them.
 ```json
 {
@@ -134,6 +181,7 @@ These configuration items are straightforward, just try them.
     "template": "~/.config/cpwn/exp_template.py",
     "script_name": "exp.py",
     "file_path": "~/.config/cpwn/pkgs",
+    "kernel_file_path": "~/.config/cpwn/kernel_exploit",
     "mirror": "",
     "archs": [
         "amd64",
@@ -144,6 +192,7 @@ These configuration items are straightforward, just try them.
         "libc6-dbg",
         "glibc-source"
     ],
-    "threads": 10
+    "threads": 10,
+    "force": false
 }
 ```
