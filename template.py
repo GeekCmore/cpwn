@@ -11,7 +11,6 @@ libcname = "{{libcname}}"
 host = "{{host}}"
 port = {{port}}
 elf = context.binary = ELF(filename)
-context.terminal = ['tmux', 'neww']
 if libcname:
     libc = ELF(libcname)
 gs = '''
