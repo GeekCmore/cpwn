@@ -387,14 +387,14 @@ def do_generate(args: dict):
 
     template = Template(open(os.path.expanduser(config["template"])).read())
     rendered_template = template.render(
-        filename=os.path.basename(args["target"]),
-        libcname=args["libc_path"],
-        host=args["host"],
-        port=args["port"],
-        debug_file_directory=args["dbg_path"],
-        source_dircetory=args["src_path"],
-        author=args["author"],
-        time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    filename=os.path.basename(args["target"]),
+    libcname=args.get("libc_path"),
+    host=args.get("host"),
+    port=args.get("port"),
+    debug_file_directory=args.get("dbg_path"),
+    source_dircetory=args.get("src_path"),
+    author=args.get("author"),
+    time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     )
     if os.path.exists(config["script_name"]):
         if not prompt("Script exists, do you want to cover it?"):
@@ -540,21 +540,25 @@ def cli(ctx, verbose, config, threads, force):
 @cli.command()
 @click.option("--host", help="Remote host.", default="127.0.0.1")
 @click.option("--port", help="Remote port.", default="1337")
-def init(host, port):
+@click.option("--nopatch", help="Just generate exp without patching elf.", is_flag=True, default=False)
+@click.option("--noexp", help="Just patch elf without generating exp.", is_flag=True, default=False)
+def init(host, port, nopatch:bool, noexp:bool):
     target_files = detect()
-    # get_files_by_version()
-    prepared_files = do_patch(target_files)
-    # generate exp
     template_args = {}
-    template_args["dbg_path"] = prepared_files[BaseFile.DBG]
-    template_args["src_path"] = prepared_files[BaseFile.SRC]
-    template_args["libc_path"] = prepared_files[BaseFile.LIBC]
-    template_args["host"] = host
-    template_args["port"] = port
-    template_args["target"] = prepared_files["duplicate"]
-    template_args["author"] = config["author"]
-    do_generate(template_args)
-
+    prepared_files = {}
+    template_args["target"] = target_files[BaseFile.EXECUTABLE]
+    if not nopatch:
+        prepared_files = do_patch(target_files)
+        template_args["dbg_path"] = prepared_files.get(BaseFile.DBG)
+        template_args["src_path"] = prepared_files.get(BaseFile.SRC)
+        template_args["libc_path"] = prepared_files.get(BaseFile.LIBC)
+    # generate exp
+    if not noexp:
+        template_args["host"] = host
+        template_args["port"] = port
+        template_args["author"] = config.get("author")
+        do_generate(template_args)
+    
 
 @cli.command(help="Fetch the popular version.")
 def fetch():
