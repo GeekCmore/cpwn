@@ -29,15 +29,15 @@ def log_base(msg, color):
 
 
 def log_info(msg):
-    log_base(msg, "blue")
+    log_base("[+] " + msg, "blue")
 
 
 def log_success(msg):
-    log_base(msg, "green")
+    log_base("[*] " + msg, "green")
 
 
 def log_error(msg):
-    log_base(msg, "red")
+    log_base("[-] " + msg, "red")
     exit(-1)
 
 
@@ -406,6 +406,109 @@ def do_generate(args: dict):
     click.echo(f"Generate script {config['script_name']} successfully.")
 
 
+def do_get_vmlinux(bz: str):
+    log_info("Start generating vmlinux.")
+    vmlinux = os.path.join(os.path.dirname(bz), "exploit/vmlinux")
+    if not os.path.exists(vmlinux):
+        subprocess.run(
+            f"vmlinux-to-elf {bz} {vmlinux}",
+            text=True,
+            shell=True,
+        )
+        log_info("Successfully!")
+    else:
+        log_info("Exists, skipping.")
+    return vmlinux
+
+
+def do_extract_cpio(exploit_dir: str, cpio: str):
+    log_info("Start extract cpio.")
+    extract_path = os.path.join(os.path.dirname(cpio), "exploit/extracted")
+    if not os.path.exists(extract_path):
+        os.mkdir(extract_path)
+        subprocess.run(
+            f"cd {extract_path}; cpio -i --no-absolute-filenames -F {cpio}",
+            text=True,
+            shell=True,
+        )
+        log_info("Successfully!")
+    else:
+        log_info("Exists, skipping.")
+    log_info("Walk for kpm files")
+    ko_files_list = []
+    for root, dirs, files in os.walk(extract_path):
+        for file in files:
+            if file.endswith(".ko"):
+                ko_file_path = os.path.join(root, file)
+                ko_files_list.append(ko_file_path)
+                shutil.copy(
+                    ko_file_path,
+                    os.path.join(exploit_dir, os.path.basename(ko_file_path)),
+                )
+    log_success(f"Found {len(ko_files_list)} {' '.join(ko_files_list)}")
+    return extract_path, ko_files_list
+
+
+def do_generate_debug(script: str, cpio: str):
+    log_info("Start generate debug script.")
+    with open(script, "r") as f:
+        content = f.read()
+    # complie exp
+    compiler_script = os.path.join(config["kernel_file_path"], "compiler.sh")
+    with open(compiler_script, "r") as f:
+        content = f.read() + "\n" + content
+    content.replace("rootfs.cpio", os.path.basename(cpio))
+    run_script = os.path.join(os.path.dirname(script), "exploit/run.sh")
+    if not os.path.exists(run_script):
+        with open(run_script, "w") as f:
+            f.write(content)
+        subprocess.run(f"chmod +x {run_script}", text=True, shell=True)
+        log_info("Create run.sh!")
+    debug_script = os.path.join(os.path.dirname(script), "exploit/debug.sh")
+    if not os.path.exists(debug_script):
+        # nokaslr
+        if "nokaslr" in content and "kaslr" not in content:
+            content.replace("kaslr", "nokaslr")
+        # gdb on :1234
+        if "-s " not in content and "-gdb" not in content:
+            lines = content.split("\\")
+            content = "\\".join(
+                lines[:-1] + [lines[-1].rstrip(" \n") + " \\\n\t-s -S\n"]
+            )
+        # write to debug_script
+        with open(debug_script, "w") as f:
+            f.write(content)
+        subprocess.run(f"chmod +x {debug_script}", text=True, shell=True)
+        log_info("Create debug.sh!")
+    log_info("Finish.")
+    return debug_script
+
+    # def do_get_kpm_addr(script, kpm):
+    # from pwn import *
+    # os.chdir(os.dirname(script))
+    # p = process(script)
+    # p.recvuntil()
+
+
+def do_generate_gdbscript(vmlinux, extracted_dir, kpm):
+    # src_gdbscript = os.path.join(config['kernel_file_path'], ".gdbinit")
+    log_info("Start generate gdbscript at exploit/.gdbinit.")
+    gdbscript_path = os.path.join(os.path.dirname(vmlinux), ".gdbinit")
+    if not os.path.exists(gdbscript_path):
+        content = f"target remote :1234\nfile vmlinux\nadd-symbol-file {os.path.join("./extracted", os.path.basename(kpm))}"
+        with open(gdbscript_path, "w") as f:
+            f.write(content)
+        log_info("Successfully!")
+
+
+def do_generate_exp(exploit_dir: str):
+    log_info("Start generate exploit script.")
+    exp_path = os.path.join(exploit_dir, "exp.c")
+    if not os.path.exists(exp_path):
+        shutil.copy(os.path.join(config["kernel_file_path"], "exp.c"), exp_path)
+        log_info("Successfully!")
+
+
 # command wrapper functions
 
 
@@ -416,6 +519,7 @@ def precmd(ctx):
         config["file_path"] = os.path.expanduser(config["file_path"])
         config["threads"] = ctx.params["threads"]
         config["force"] = ctx.params["force"]
+        config["kernel_file_path"] = os.path.expanduser(config["kernel_file_path"])
 
 
 @click.group(invoke_without_command=False)
@@ -465,6 +569,46 @@ def fetch():
             download_list += generate_expect_download_list(version, expect_arch)
     log_success(f"Get {len(rows)} verions, start downloading.")
     multi_download(download_list)
+
+
+@cli.command(help="Initialize kernel exploit enviroment.")
+@click.argument(
+    "script",
+    type=click.Path(exists=True, file_okay=True, dir_okay=False),
+    # help="Path of qemu start script.",
+)
+@click.argument(
+    "cpio",
+    type=click.Path(exists=True, file_okay=True, dir_okay=False),
+    # help="Path of cpio archive.",
+)
+@click.argument(
+    "bz",
+    type=click.Path(exists=True, file_okay=True, dir_okay=False),
+    # help="Path of boot executable bzImage.",
+)
+# @click.argument(
+# "kpm",
+# type=click.Path(exists=True, file_okay=True, dir_okay=False),
+# help="Path of kernel module.",
+# )
+def kernel(script, cpio, bz):
+    # print(f"ok {script}, {cpio}, {bz}, {kpm}")
+    # auto find addr (start qemu), generate debug script.
+    # here just copy directory
+    pwd = os.getcwd()
+    script = os.path.join(pwd, os.path.basename(script))
+    exploit_dir = os.path.join(pwd, "exploit")
+    if not os.path.exists(exploit_dir):
+        os.mkdir(exploit_dir)
+    cpio = os.path.join(pwd, os.path.basename(cpio))
+    bz = os.path.join(pwd, os.path.basename(bz))
+    vmlinux = do_get_vmlinux(bz)
+    extracted_dir, kpm_list = do_extract_cpio(exploit_dir, cpio)
+    gdbscript = do_generate_gdbscript(vmlinux, extracted_dir, kpm_list[0])
+    debug_script = do_generate_debug(script, cpio)
+    exp = do_generate_exp(exploit_dir)
+    # shutil.copytree(config["kernel_file_path"], os.path.join(os.getcwd(), "exploit"))
 
 
 if __name__ == "__main__":
