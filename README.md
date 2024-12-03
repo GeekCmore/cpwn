@@ -15,7 +15,7 @@ git clone https://github.com/GeekCmore/cpwn
 cd cpwn
 ./setup.sh
 ```
-If you are using other OS, please to modify the [setup.sh](./setup.sh) to fit your enviroment. Take ease, that's not take you long time.
+If you are using other OS, please to modify the [setup.sh](./setup.sh) to fit your enviroment. Take ease, that's not take you long time. Test only in Ubuntu22.04 and Ubuntu24.04, Please send me an issue if you have any questions.
 ## Usage
 ### fetch
 If you first use cpwn, just `fetch` the glibc versions maintain in https://launchpad.net/ubuntu/. The download speed depends on your network environment, and I'll expand cpwn to fit other verions and mirrors.
