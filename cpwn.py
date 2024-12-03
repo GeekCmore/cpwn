@@ -495,7 +495,7 @@ def do_generate_gdbscript(vmlinux, extracted_dir, kpm):
     log_info("Start generate gdbscript at exploit/.gdbinit.")
     gdbscript_path = os.path.join(os.path.dirname(vmlinux), ".gdbinit")
     if not os.path.exists(gdbscript_path):
-        content = f"target remote :1234\nfile vmlinux\nadd-symbol-file {os.path.join("./extracted", os.path.basename(kpm))}"
+        content = f"target remote :1234\nfile vmlinux\nadd-symbol-file {os.path.join('./extracted', os.path.basename(kpm))}"
         with open(gdbscript_path, "w") as f:
             f.write(content)
         log_info("Successfully!")
@@ -537,7 +537,7 @@ def cli(ctx, verbose, config, threads, force):
         precmd(ctx)
 
 
-@cli.command()
+@cli.command(help="Initialize pwn game exploit enviroment.")
 @click.option("--host", help="Remote host.", default="127.0.0.1")
 @click.option("--port", help="Remote port.", default="1337")
 @click.option("--nopatch", help="Just generate exp without patching elf.", is_flag=True, default=False)
