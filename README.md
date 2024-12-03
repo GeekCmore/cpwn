@@ -13,7 +13,7 @@ If you are using Ubuntu, you can just set as follwing:
 ```sh
 git clone https://github.com/GeekCmore/cpwn
 cd cpwn
-sh ./setup
+./setup.sh
 ```
 If you are using other OS, please to modify the [setup.sh](./setup.sh) to fit your enviroment. Take ease, that's not take you long time.
 ## Usage
