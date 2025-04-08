@@ -1,3 +1,5 @@
+# Announcement
+This project is currently maintained for bug fixes, but new features will be released in the [epwn](https://github.com/GeekCmore/epwn).
 # cpwn
 A tool inspired by [pwninit](https://github.com/io12/pwninit) and [glibc-all-in-one](https://github.com/matrix1001/glibc-all-in-one) to initialize pwn game exploit enviroment.
 
