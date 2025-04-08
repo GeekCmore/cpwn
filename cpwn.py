@@ -29,15 +29,15 @@ def log_base(msg, color):
 
 
 def log_info(msg):
-    log_base("[+] " + msg, "blue")
+    log_base(msg, "blue")
 
 
 def log_success(msg):
-    log_base("[*] " + msg, "green")
+    log_base(msg, "green")
 
 
 def log_error(msg):
-    log_base("[-] " + msg, "red")
+    log_base(msg, "red")
     exit(-1)
 
 
@@ -387,7 +387,7 @@ def do_generate(args: dict):
 
     template = Template(open(os.path.expanduser(config["template"])).read())
     rendered_template = template.render(
-    filename=os.path.basename(args["target"]),
+    filename=os.path.basename(args["target"]) + '_patched',
     libcname=args.get("libc_path"),
     host=args.get("host"),
     port=args.get("port"),
