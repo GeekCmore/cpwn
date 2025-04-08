@@ -29,7 +29,7 @@ def start():
     elif args.DOCKER:
         import docker
         from os import path
-        p = remote(ip, port)
+        p = remote(host, port)
         client = docker.from_env()
         container = client.containers.get(container_id=container_id)
         processes_info = container.top()
@@ -47,7 +47,11 @@ def start():
             for i, v in enumerate(target_proc):
                 print(f"{i} => {v}")
             idx = int(input(f"Which one:"))
-        run_in_new_terminal(["sudo", "gdb", "-p", target_proc[idx]['PID']])
+        import tempfile
+        with tempfile.NamedTemporaryFile(prefix = 'cpwn-gdbscript-', delete=False, suffix = '.gdb', mode = 'w') as tmp:
+            tmp.write(f'shell rm {tmp.name}\n{gs}')
+        print(tmp.name)
+        run_in_new_terminal(["sudo", "gdb", "-p", target_proc[idx]['PID'], "-x", tmp.name])
         return p
     else:
         return process(elf.path)
