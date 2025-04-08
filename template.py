@@ -10,6 +10,8 @@ filename = "{{filename}}"
 libcname = "{{libcname}}"
 host = "{{host}}"
 port = {{port}}
+container_id = ""
+proc_name = ""
 elf = context.binary = ELF(filename)
 if libcname:
     libc = ELF(libcname)
@@ -24,6 +26,29 @@ def start():
         return gdb.debug(elf.path, gdbscript = gs)
     elif args.REMOTE:
         return remote(host, port)
+    elif args.DOCKER:
+        import docker
+        from os import path
+        p = remote(ip, port)
+        client = docker.from_env()
+        container = client.containers.get(container_id=container_id)
+        processes_info = container.top()
+        titles = processes_info['Titles']
+        processes = [dict(zip(titles, proc)) for proc in processes_info['Processes']]
+        target_proc = []
+        for proc in processes:
+            cmd = proc.get('CMD', '')
+            exe_path = cmd.split()[0] if cmd else ''
+            exe_name = path.basename(exe_path)
+            if exe_name == proc_name:
+                target_proc.append(proc)
+        idx = 0
+        if len(target_proc) > 1:
+            for i, v in enumerate(target_proc):
+                print(f"{i} => {v}")
+            idx = int(input(f"Which one:"))
+        run_in_new_terminal(["sudo", "gdb", "-p", target_proc[idx]['PID']])
+        return p
     else:
         return process(elf.path)
 
