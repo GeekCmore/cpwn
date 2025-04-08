@@ -7,7 +7,7 @@ A tool inspired by [pwninit](https://github.com/io12/pwninit) and [glibc-all-in-
 - Provides exploit templates that support display debug symbols and source code.
 - Flexible way to modify [configuration files](./config.json).
 - Automatically initializes the kernel exploitation environment.
-
+- Debug process in docker container by [template script](./template.py).
 ## Setup
 If you are using Ubuntu, you can just set as follwing:
 ```sh
@@ -131,8 +131,9 @@ The template is as follows, you can replace it as you like. But with this templa
 - run `./exp.py GDB` to pop a gdb window(change the `context.terminal = ['tmux', 'neww']` to  fit your terminal) with debug symbols and source of glibc.
 - run `./exp.py REMOTE` to attack the remote aircraft.
 - run `./exp.py DEBUG` to turn on debug log mode of pwntools.
+- run `./exp.py DOCKER` to start a remote process and pop up a gdb terminal to debug.
 ```py
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
 '''
     author: {{author}}
@@ -144,8 +145,9 @@ filename = "{{filename}}"
 libcname = "{{libcname}}"
 host = "{{host}}"
 port = {{port}}
+container_id = ""
+proc_name = ""
 elf = context.binary = ELF(filename)
-context.terminal = ['tmux', 'neww']
 if libcname:
     libc = ELF(libcname)
 gs = '''
@@ -159,6 +161,29 @@ def start():
         return gdb.debug(elf.path, gdbscript = gs)
     elif args.REMOTE:
         return remote(host, port)
+    elif args.DOCKER:
+        import docker
+        from os import path
+        p = remote(ip, port)
+        client = docker.from_env()
+        container = client.containers.get(container_id=container_id)
+        processes_info = container.top()
+        titles = processes_info['Titles']
+        processes = [dict(zip(titles, proc)) for proc in processes_info['Processes']]
+        target_proc = []
+        for proc in processes:
+            cmd = proc.get('CMD', '')
+            exe_path = cmd.split()[0] if cmd else ''
+            exe_name = path.basename(exe_path)
+            if exe_name == proc_name:
+                target_proc.append(proc)
+        idx = 0
+        if len(target_proc) > 1:
+            for i, v in enumerate(target_proc):
+                print(f"{i} => {v}")
+            idx = int(input(f"Which one:"))
+        run_in_new_terminal(["sudo", "gdb", "-p", target_proc[idx]['PID']])
+        return p
     else:
         return process(elf.path)
 
@@ -167,7 +192,6 @@ p = start()
 # Your exploit here
 
 p.interactive()
-
 ```
 
 And the  [kernel/exploit/exp.c](kernel/exploit/exp.c) is the template for kernel exploit.
