@@ -29,15 +29,17 @@ def log_base(msg, color):
 
 
 def log_info(msg):
+    log_base("[+] " + msg, "blue")
+
+def log_table(msg):
     log_base(msg, "blue")
 
-
 def log_success(msg):
-    log_base(msg, "green")
+    log_base("[*] " + msg, "green")
 
 
 def log_error(msg):
-    log_base(msg, "red")
+    log_base("[-] " + msg, "red")
     exit(-1)
 
 
@@ -239,16 +241,19 @@ def detect(target_files: dict = {}) -> dict:
     return target_files
 
 
-def get_version_by_libc(file):
-    result = subprocess.run(
-        f'strings "{file}" | grep "Ubuntu GLIBC" | tail -n 1',
+def get_version_by_libc(file): 
+    result = subprocess.run(  #
+        f'strings "{file}" | grep "Ubuntu GLIBC" | tail -n 1', #在libc文件中查找Ubuntu GLIBC
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
         shell=True,
     )
-    return result.stdout.split("(Ubuntu GLIBC ")[1].split(")")[0]
-
+    try:
+        version = result.stdout.split("(Ubuntu GLIBC ")[1].split(")")[0]
+        return version
+    except:
+        return 'ERROR'
 
 def get_glibc_files(version: str, arch: str) -> dict:
     """
@@ -305,7 +310,7 @@ def choose_version():
     libc_list = sorted(libc_list, key=lambda x: x)
     for i, row in enumerate(libc_list):
         table.add_row([str(i), row])
-    log_info(table)
+    log_table(table)
     idx = int(input("Choose the version you wnat to modify:"))
     return libc_list[idx]
 
@@ -337,6 +342,8 @@ def do_patch(target_files):
         version = choose_version()
     else:
         version = get_version_by_libc(target_files[BaseFile.LIBC])
+        if version == 'ERROR':
+            return version
     glibc_files = get_glibc_files(version, arch)
     if not os.path.exists(glibc_files[BaseFile.LIBC]) or not os.path.exists(
         glibc_files[BaseFile.LD]
@@ -347,7 +354,7 @@ def do_patch(target_files):
             log_info("Start downloading...")
             download_give_version_arch(version, arch)
         else:
-            log_error("No suitable glibc!")
+            return 'ERROR'
         prepared_files[BaseFile.LIBC] = glibc_files[BaseFile.LIBC]
     prepared_files[BaseFile.LIBC] = glibc_files[BaseFile.LIBC]
     prepared_files[BaseFile.LD] = glibc_files[BaseFile.LD]
@@ -381,21 +388,71 @@ def do_patch(target_files):
     )
     return prepared_files
 
-
+def do_error_patch(target_files,template_args):
+    log_info("patch_failed! No suitable glibc!")
+    log_info("please patched by yourself! Something useful:")
+    log_info(f'chmod +x "{target_files[BaseFile.EXECUTABLE]}"')
+    log_info(f'patchelf --replace-needed libc.so.6 "{target_files[BaseFile.LIBC]}" "{target_files[BaseFile.EXECUTABLE]}"')
+    log_info(f'patchelf --set-interpreter "{target_files[BaseFile.LD]}" "{target_files[BaseFile.EXECUTABLE]}"')
+    if prompt(f"Do you want to use the found libc/ld ?"):
+        target_excutable = target_files[BaseFile.EXECUTABLE] + "_patched"
+        copy(target_files[BaseFile.EXECUTABLE], target_excutable)
+        subprocess.run(f'chmod +x "{target_files[BaseFile.EXECUTABLE]}"',text=True, shell=True)
+        subprocess.run(f'patchelf --replace-needed libc.so.6 "{target_files[BaseFile.LIBC]}" "{target_files[BaseFile.EXECUTABLE]}"',text=True, shell=True)
+        subprocess.run(f'patchelf --set-interpreter "{target_files[BaseFile.LD]}" "{target_files[BaseFile.EXECUTABLE]}"',text=True, shell=True)
+        template_args["libc_path"] = {target_files[BaseFile.LIBC]}
+        template_args["src_path"] = 'error'
+        template_args["dbg_path"] = 'error'
+    else:
+        template_args["dbg_path"] = 'error'
+        template_args["src_path"] = 'error'
+        template_args["libc_path"] = 'error'
 def do_generate(args: dict):
     from jinja2 import Template
-
-    template = Template(open(os.path.expanduser(config["template"])).read())
-    rendered_template = template.render(
-    filename=os.path.basename(args["target"]) + '_patched',
-    libcname=args.get("libc_path"),
-    host=args.get("host"),
-    port=args.get("port"),
-    debug_file_directory=args.get("dbg_path"),
-    source_dircetory=args.get("src_path"),
-    author=args.get("author"),
-    time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-    )
+    import glob
+    # 展开模板目录路径
+    template_dir = os.path.expanduser(config["template"])
+    # 检查template是否是目录
+    if os.path.isdir(template_dir):
+        # 获取目录下所有的.py文件作为模板选项
+        template_files = glob.glob(os.path.join(template_dir, "*.py"))    
+        if not template_files:
+            log_error(f"No template files found in {template_dir}")
+            exit(1)
+        log_info("Available template files:")
+        for i, template_file in enumerate(template_files, 1):
+            log_info(f"{i}. {os.path.basename(template_file)}")
+        while(1):
+            try:
+                choice = int(input("Please select a template number: "))
+                if 1 <= choice <= len(template_files):
+                    selected_template = template_files[choice - 1]
+                    break
+                else:
+                    log_info(f"Please enter a number between 1 and {len(template_files)}")
+            except ValueError:
+                log_info("Invalid number")
+                exit(1)
+        # 读取用户选择的模板文件
+        log_info(f"Using template: {os.path.basename(selected_template)}")
+        template = Template(open(selected_template).read())
+    else:
+        log_error("config template not a directory.")
+        exit(1)
+    try:
+        rendered_template = template.render(
+        filename=os.path.basename(args["target"])+ '_patched',
+        libcname=args.get("libc_path"),
+        host=args.get("host"),
+        port=args.get("port"),
+        debug_file_directory=args.get("dbg_path"),
+        source_dircetory=args.get("src_path"),
+        author=args.get("author"),
+        time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        )
+    except Exception as e:
+        log_error(f"Error rendering template: {e}")
+        exit(1)
     if os.path.exists(config["script_name"]):
         if not prompt("Script exists, do you want to cover it?"):
             log_info("Haven't cover it. No script genarated.")
@@ -539,7 +596,7 @@ def cli(ctx, verbose, config, threads, force):
 
 @cli.command(help="Initialize pwn game exploit enviroment.")
 @click.option("--host", help="Remote host.", default="127.0.0.1")
-@click.option("--port", help="Remote port.", default="1337")
+@click.option("--port", help="Remote port.", default="9999")
 @click.option("--nopatch", help="Just generate exp without patching elf.", is_flag=True, default=False)
 @click.option("--noexp", help="Just patch elf without generating exp.", is_flag=True, default=False)
 def init(host, port, nopatch:bool, noexp:bool):
@@ -549,9 +606,13 @@ def init(host, port, nopatch:bool, noexp:bool):
     template_args["target"] = target_files[BaseFile.EXECUTABLE]
     if not nopatch:
         prepared_files = do_patch(target_files)
-        template_args["dbg_path"] = prepared_files.get(BaseFile.DBG)
-        template_args["src_path"] = prepared_files.get(BaseFile.SRC)
-        template_args["libc_path"] = prepared_files.get(BaseFile.LIBC)
+        if(prepared_files == 'ERROR'):
+            do_error_patch(target_files,template_args)
+            
+        else:
+            template_args["dbg_path"] = prepared_files.get(BaseFile.DBG)
+            template_args["src_path"] = prepared_files.get(BaseFile.SRC)
+            template_args["libc_path"] = prepared_files.get(BaseFile.LIBC)
     # generate exp
     if not noexp:
         template_args["host"] = host
